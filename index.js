@@ -243,37 +243,31 @@ function findWorstAirQuality(...args) {
 
 
 exports.getAirData = functions.region('asia-northeast3').https.onCall(async (data, context) => {
-  const stationName = data.stationName;
-  if (!stationName) {
-    throw new functions.https.HttpsError('invalid-argument', 'station name 요청');
-  }
-
   try {
-    const documentSnapshot = await admin.firestore().collection('locations').doc(stationName).get();
-    if (!documentSnapshot.exists) {
-      throw new functions.https.HttpsError('not-found', 'Document does not exist');
+    const stationName = data.stationName;
+    if (!stationName) {
+      throw new functions.https.HttpsError('invalid-argument', 'station name 요청');
     }
-    const locationData = documentSnapshot.data();
-    return locationData;
-  } catch (error) {
-    console.error(error);
-    throw error;
-  }
-});
+    if (!sidoName) {
+      throw new functions.https.HttpsError('invalid-argument', 'sido name 요청');
+    }  
 
-exports.getForecast = functions.region('asia-northeast3').https.onRequest(async(req,res) =>{
-  try{
-    const sidoName = req.query.sidoName;
     const dayArr = [];
     for (let i = 0; i < 6; i++) {
       dayArr.push(moment().add(i+1, 'days').format("YYYY-MM-DD"));
     }
+    const [locationDocumentSnapshot, forecastDocumentSnapshot] = await Promise.all([
+      admin.firestore().collection('locations').doc(stationName).get(),
+      admin.firestore().collection('forecast').doc('forecast').get()
+    ]);
+    const locationDatas = locationDocumentSnapshot.data();
+    const forecastDatas = forecastDocumentSnapshot.data();
 
-    const documentSnapshot = await admin.firestore().collection('forecast').doc('forecast').get();
-    if (!documentSnapshot.exists) {
+    if (!locationDocumentSnapshot.exists||!forecastDocumentSnapshot.exists) {
       throw new functions.https.HttpsError('not-found', 'Document does not exist');
     }
-    const forecastDatas = documentSnapshot.data();
+    const sidoName = locationDatas.sidoName;
+
     const items =[];
     const fiveThirtyPmKST = moment().set({hour: 17, minute: 30, second: 0});
     if (moment().isSameOrAfter(fiveThirtyPmKST)) {
@@ -292,13 +286,15 @@ exports.getForecast = functions.region('asia-northeast3').https.onRequest(async(
       }
     }
     const response = {};
-    response.items = items;
+    response.forecast = items;
     response.pm10ImgUrl = forecastDatas.PM10ImgUrl;
     response.pm25ImgUrl = forecastDatas.PM25ImgUrl;
+    response.thumnailImageUrl = forecastDatas.thumnailImageUrl;
     response.information = forecastDatas.information;
-    res.status(200).send(response);
-  }catch(error){
+    response.airData = locationDatas
+    return response;
+  } catch (error) {
     console.error(error);
-    res.status(500).send('Error occurred while getting the forecast data.');
+    throw error;
   }
 });

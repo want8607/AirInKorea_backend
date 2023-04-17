@@ -54,7 +54,7 @@ try {
 
         if (informData == today) {
           lastImageUrl7 = items[i].imageUrl7;
-          thumnailImage = items[i].imageUrl1;
+          thumbnailImage = items[i].imageUrl1;
         }
       } else if (informCode === "PM25") {
         if (informData == today) {
@@ -71,7 +71,7 @@ try {
 
   forecast.PM10ImgUrl = lastImageUrl7;
   forecast.PM25ImgUrl = lastImageUrl8;
-  forecast.thumnailImageUrl = thumnailImage;
+  forecast.thumbnailImageUrl = thumbnailImage;
   const target = 'en';
   let [translations] = await translate.translate(informCause, target);
   translations = Array.isArray(translations) ? translations : [translations];
@@ -125,6 +125,7 @@ function mergeKoreaName(array) {
     let [region, grade] = element.split(':');
     region = region.trim();
     grade = grade.trim();
+    
     if(region ==='신뢰도'){
       continue;
     }
@@ -138,8 +139,17 @@ function mergeKoreaName(array) {
     }else if(grade === '높음'){
       grade = '나쁨';
     }
+    if(grade === '매우나쁨'){
+      grade = 'Very Unhealthy'
+    }else if(grade === '나쁨'){
+      grade = 'Unhealthy'
+    }else if(grade === '보통'){
+      grade = 'Moderate'
+    }else if(grade === '좋음'){
+      grade = 'Good'
+    }
     if (value[region] != null) {
-      if (grade === '좋음' || (grade === '보통' && value[region] === '좋음') || (grade === '나쁨' && (value[region] === '좋음' || value[region] === '보통'))) {
+      if (grade === 'Good' || (grade === 'Moderate' && value[region] === 'Good') || (grade === 'Unhealthy' && (value[region] === 'Good' || value[region] === 'Moderate')) || (grade ==='Very Unhealthy' && (value[region] === 'Good' || value[region] === 'Moderate'||value[region] === 'Unhealthy'))) {
         value[region] = grade;
       }
     } else {
@@ -166,7 +176,7 @@ exports.getAirDataAndSaveToDatabase = functions.region('asia-northeast3').pubsub
 
       const data = {
         sidoName: items[i].sidoName,
-        dataTime: items[i].dataTime,
+        dataTime: changeDateFormat(items[i].dataTime),
         pm10Value: items[i].pm10Value,
         pm25Value: items[i].pm25Value,
         no2Value: items[i].no2Value,
@@ -205,7 +215,20 @@ exports.getAirDataAndSaveToDatabase = functions.region('asia-northeast3').pubsub
     console.error(error);
   }
 });
+function changeDateFormat(dateStr){
+  const date = new Date(dateStr);
+  const options = {
+    weekday: 'long',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: true
+  };
 
+  return date.toLocaleString('en-US', options);
+}
 function getGradeFromValue(value, breakpoints) {
   if(value == "-" ){
     return "Error"
@@ -248,10 +271,6 @@ exports.getAirData = functions.region('asia-northeast3').https.onCall(async (dat
     if (!stationName) {
       throw new functions.https.HttpsError('invalid-argument', 'station name 요청');
     }
-    if (!sidoName) {
-      throw new functions.https.HttpsError('invalid-argument', 'sido name 요청');
-    }  
-
     const dayArr = [];
     for (let i = 0; i < 6; i++) {
       dayArr.push(moment().add(i+1, 'days').format("YYYY-MM-DD"));
@@ -267,7 +286,9 @@ exports.getAirData = functions.region('asia-northeast3').https.onCall(async (dat
       throw new functions.https.HttpsError('not-found', 'Document does not exist');
     }
     const sidoName = locationDatas.sidoName;
-
+    if (!sidoName) {
+      throw new functions.https.HttpsError('invalid-argument', 'sido name 요청');
+    }  
     const items =[];
     const fiveThirtyPmKST = moment().set({hour: 17, minute: 30, second: 0});
     if (moment().isSameOrAfter(fiveThirtyPmKST)) {
@@ -289,10 +310,10 @@ exports.getAirData = functions.region('asia-northeast3').https.onCall(async (dat
     response.forecast = items;
     response.pm10ImgUrl = forecastDatas.PM10ImgUrl;
     response.pm25ImgUrl = forecastDatas.PM25ImgUrl;
-    response.thumnailImageUrl = forecastDatas.thumnailImageUrl;
+    response.thumbnailImageUrl = forecastDatas.thumbnailImageUrl;
     response.information = forecastDatas.information;
     response.airData = locationDatas
-    return response;
+    return JSON.stringify(response);
   } catch (error) {
     console.error(error);
     throw error;

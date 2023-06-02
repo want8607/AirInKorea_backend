@@ -13,7 +13,7 @@ moment.tz.setDefault("Asia/Seoul");
 const db = admin.firestore();
 
 exports.get3dayForecastDataAndSaveToDatabase = functions.region('asia-northeast3').pubsub
-.schedule('1 5,11,17,23 * * *').timeZone("Asia/Seoul")
+.schedule('5 5,11,17,23 * * *').timeZone("Asia/Seoul")
 .onRun(async (context) => {
 try {
   const url = "http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMinuDustFrcstDspth";
@@ -24,7 +24,10 @@ try {
   const searchDate = moment().format("YYYY-MM-DD");
   const forecast = {};
   const translate = new Translate();
-
+  let lastImageUrl7 = "";
+  let lastImageUrl8 = "";
+  let thumbnailImage= "";
+  let informCause = "";
   const [pm10Response, pm25Response] = await Promise.all([
     axios.get(`${url}?serviceKey=${serviceKey}&returnType=${returnType}&searchDate=${searchDate}&numOfRows=${numOfRows}&ver=${ver}&informCode=PM10`),
     axios.get(`${url}?serviceKey=${serviceKey}&returnType=${returnType}&searchDate=${searchDate}&numOfRows=${numOfRows}&ver=${ver}&informCode=PM25`)
@@ -45,9 +48,9 @@ try {
       const informGradeArray = items[i].informGrade.split(',');
       const informData = items[i].informData;
       const value = mergeKoreaName(informGradeArray);
-      const data = {};
-
+      
       if (informCode === "PM10") {
+        const data = {};
         data.informData = informData;
         data.value = value;
         forecast[informData] = data;
@@ -76,7 +79,6 @@ try {
   let [translations] = await translate.translate(informCause, target);
   translations = Array.isArray(translations) ? translations : [translations];
   forecast.information = translations[0];
-
   const dbRef = db.collection('forecast').doc('forecast');
   await dbRef.set(forecast,{merge: true});
   console.log(`3days data saved to database successfully.`);
@@ -106,8 +108,8 @@ exports.get4dayForecastDataAndSaveToDatabase = functions.region('asia-northeast3
     const frcstArr = [item.frcstOneCn.split(','),item.frcstTwoCn.split(','),item.frcstThreeCn.split(','),item.frcstFourCn.split(',')];
     const frcstDateArr = [item.frcstOneDt,item.frcstTwoDt,item.frcstThreeDt,item.frcstFourDt];
     const forecast = {};
-    const data = {};
     for (let i = 0; i < frcstArr.length; i++) {
+      const data = {};
       data.value = mergeKoreaName(frcstArr[i]);
       forecast[frcstDateArr[i]] = data;
     }
@@ -125,7 +127,6 @@ function mergeKoreaName(array) {
     let [region, grade] = element.split(':');
     region = region.trim();
     grade = grade.trim();
-    
     if(region ==='신뢰도'){
       continue;
     }
@@ -160,7 +161,7 @@ function mergeKoreaName(array) {
 };
 
 exports.getAirDataAndSaveToDatabase = functions.region('asia-northeast3').pubsub
-.schedule('1,10 * * * *').timeZone('Asia/Seoul')
+.schedule('0,15,30,45 * * * *').timeZone('Asia/Seoul')
 .onRun(async (context) => {
   try {
     const url = "http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getCtprvnRltmMesureDnsty";

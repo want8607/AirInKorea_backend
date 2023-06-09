@@ -13,7 +13,7 @@ moment.tz.setDefault("Asia/Seoul");
 const db = admin.firestore();
 
 exports.get3dayForecastDataAndSaveToDatabase = functions.region('asia-northeast3').pubsub
-.schedule('5 5,11,17,23 * * *').timeZone("Asia/Seoul")
+.schedule('10 5,11,17,23 * * *').timeZone("Asia/Seoul")
 .onRun(async (context) => {
 try {
   const url = "http://apis.data.go.kr/B552584/ArpltnInforInqireSvc/getMinuDustFrcstDspth";
@@ -24,10 +24,10 @@ try {
   const searchDate = moment().format("YYYY-MM-DD");
   const forecast = {};
   const translate = new Translate();
-  let lastImageUrl7 = "";
-  let lastImageUrl8 = "";
-  let thumbnailImage= "";
-  let informCause = "";
+  let lastImageUrl7 = null;
+  let lastImageUrl8 = null;
+  let thumbnailImage= null;
+  let informCause = null;
   const [pm10Response, pm25Response] = await Promise.all([
     axios.get(`${url}?serviceKey=${serviceKey}&returnType=${returnType}&searchDate=${searchDate}&numOfRows=${numOfRows}&ver=${ver}&informCode=PM10`),
     axios.get(`${url}?serviceKey=${serviceKey}&returnType=${returnType}&searchDate=${searchDate}&numOfRows=${numOfRows}&ver=${ver}&informCode=PM25`)
@@ -58,6 +58,7 @@ try {
         if (informData == today) {
           lastImageUrl7 = items[i].imageUrl7;
           thumbnailImage = items[i].imageUrl1;
+          informCause = items[i].informCause.split(" ").slice(2).join(" ");
         }
       } else if (informCode === "PM25") {
         if (informData == today) {
@@ -65,20 +66,26 @@ try {
         }
       }
 
-      informCause = items[i].informCause.split(" ").slice(2).join(" ");
     }
   }
 
   processForecastData(pm10Response, "PM10");
   processForecastData(pm25Response, "PM25");
-
-  forecast.PM10ImgUrl = lastImageUrl7;
-  forecast.PM25ImgUrl = lastImageUrl8;
-  forecast.thumbnailImageUrl = thumbnailImage;
-  const target = 'en';
-  let [translations] = await translate.translate(informCause, target);
-  translations = Array.isArray(translations) ? translations : [translations];
-  forecast.information = translations[0];
+  if(lastImageUrl7 != null){
+    forecast.PM10ImgUrl = lastImageUrl7;
+  }
+  if(lastImageUrl8 != null){
+    forecast.PM25ImgUrl = lastImageUrl8;
+  }  
+  if(thumbnailImage != null){
+    forecast.thumbnailImageUrl = thumbnailImage;
+  }
+  if(informCause != null){
+    const target = 'en';
+    let [translations] = await translate.translate(informCause, target);
+    translations = Array.isArray(translations) ? translations : [translations];
+    forecast.information = translations[0];
+  }
   const dbRef = db.collection('forecast').doc('forecast');
   await dbRef.set(forecast,{merge: true});
   console.log(`3days data saved to database successfully.`);

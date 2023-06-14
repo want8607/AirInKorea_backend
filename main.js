@@ -1,4 +1,3 @@
-require('dotenv').config();
 const functions = require("firebase-functions");
 const admin = require("firebase-admin");
 const axios = require("axios");
@@ -192,12 +191,12 @@ exports.getAirDataAndSaveToDatabase = functions.region('asia-northeast3').pubsub
         coValue: items[i].coValue,
         o3Value: items[i].o3Value,
         khaiValue: items[i].khaiValue,
-        pm10Grade: getGradeFromValue(items[i].pm10Value, [30, 70, 100, 150, 200]),
-        pm25Grade: getGradeFromValue(items[i].pm25Value, [15, 35, 50, 75, 100]),
-        no2Grade: getGradeFromValue(items[i].no2Value, [0.036, 0.084, 0.12, 0.18, 0.24]),
-        so2Grade: getGradeFromValue(items[i].so2Value, [0.03, 0.07, 0.1, 0.15, 0.2]),
-        coGrade: getGradeFromValue(items[i].coValue, [5.4, 12.6, 18, 27, 36]),
-        o3Grade: getGradeFromValue(items[i].o3Value, [0.054, 0.126, 0.18, 0.27, 0.36]),
+        pm10Grade: getGradeFromValue(items[i].pm10Value, [30, 60, 100, 150, 200]),
+        pm25Grade: getGradeFromValue(items[i].pm25Value, [15, 30, 50, 75, 100]),
+        no2Grade: getGradeFromValue(items[i].no2Value, [0.03, 0.06, 0.2]),
+        so2Grade: getGradeFromValue(items[i].so2Value, [0.02, 0.05, 0.15]),
+        coGrade: getGradeFromValue(items[i].coValue, [2, 9, 15]),
+        o3Grade: getGradeFromValue(items[i].o3Value, [0.03, 0.09, 0.15]),
         khaiGrade: items[i].khaiGrade,
         pm10Flag: items[i].pm10Flag,
         pm25Flag: items[i].pm25Flag,
@@ -241,19 +240,32 @@ function getGradeFromValue(value, breakpoints) {
   if(value == "-" ){
     return "Error"
   }
-  const grades = ["Good", "Moderate", "Poor", "Unhealthy", "Very Unhealthy", "Hazardous"]
-  if (value <= breakpoints[0]) {
-  return grades[0];
-  } else if (value <= breakpoints[1]) {
-  return grades[1];
-  } else if (value <= breakpoints[2]) {
-  return grades[2];
-  } else if (value <= breakpoints[3]) {
-  return grades[3];
-  } else if (value <= breakpoints[4]) {
-  return grades[4];
-  } else {
-  return grades[5];
+  if(breakpoints.length >4){
+    const grades = ["Good", "Moderate", "Poor", "Unhealthy", "Very Unhealthy", "Hazardous"]
+    if (value <= breakpoints[0]) {
+    return grades[0];
+    } else if (value <= breakpoints[1]) {
+    return grades[1];
+    } else if (value <= breakpoints[2]) {
+    return grades[2];
+    } else if (value <= breakpoints[3]) {
+    return grades[3];
+    } else if (value <= breakpoints[4]) {
+    return grades[4];
+    } else {
+    return grades[5];
+    }
+  }else{
+    const grades = ["Good", "Moderate", "Unhealthy", "Very Unhealthy"]
+    if (value <= breakpoints[0]) {
+    return grades[0];
+    } else if (value <= breakpoints[1]) {
+    return grades[1];
+    } else if (value <= breakpoints[2]) {
+    return grades[2];
+    } else {
+    return grades[3];
+    } 
   }
 }
 
@@ -327,3 +339,37 @@ exports.getAirData = functions.region('asia-northeast3').https.onCall(async (dat
     throw error;
   }
 });
+
+async function coordinateToAddress(x,y) {
+  try {
+    let result = ""
+    const url = "https://dapi.kakao.com/v2/local/geo/coord2regioncode.json";
+    const serviceKey = process.env.SERVICE_KEY;
+    const response = await axios.get(`${url}?x=${x}&y=${y}`,{
+      headers: {
+        Authorization: serviceKey, // 인증 헤더 값 추가
+      }}); 
+    const documents = response.documents;
+    for(const document of documents){
+      if(document.region_type != "B"){
+        continue
+      }
+      const ko_eupmyeondong = document.region_3depth_name
+      result = ko_eupmyeondong
+    }
+    return result;
+  } catch (error) {
+    throw new Error(`GET request failed: ${error.message}`);
+  }
+}
+
+exports.coordinateToAddress = functions.https.onRequest(async(request,response) =>{
+  // const x = data.x;
+  // const y = data.y;
+  try{
+    const result = await coordinateToAddress(127.10459896729914,37.40269721785548);
+    response.result = result;
+  }catch(e){
+    response.error = e;
+  }
+})

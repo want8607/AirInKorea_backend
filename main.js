@@ -344,18 +344,28 @@ async function coordinateToAddress(x,y) {
   try {
     let result = ""
     const url = "https://dapi.kakao.com/v2/local/geo/coord2regioncode.json";
-    const serviceKey = process.env.SERVICE_KEY;
+    const kakaoServiceKey = process.env.KAKAO_KEY;
     const response = await axios.get(`${url}?x=${x}&y=${y}`,{
       headers: {
-        Authorization: serviceKey, // 인증 헤더 값 추가
+        Authorization: kakaoServiceKey, // 인증 헤더 값 추가
       }}); 
-    const documents = response.documents;
+    const documents = response.data.documents;
     for(const document of documents){
       if(document.region_type != "B"){
         continue
       }
       const ko_eupmyeondong = document.region_3depth_name
-      result = ko_eupmyeondong
+      // 엑셀 파일에서 여러 컬럼의 값을 가져오기
+      result = findValuesInExcel(
+        'address_end.xlsx',
+        'sheet1',
+        'ko_eupmyeondong',
+        ko_eupmyeondong,
+        ['en_do', 'en_sigungu','en_eupmyeondong','station']
+      );
+    }
+    if (response.status !== 200) {
+      throw new Error("API response error");
     }
     return result;
   } catch (error) {
@@ -363,13 +373,36 @@ async function coordinateToAddress(x,y) {
   }
 }
 
-exports.coordinateToAddress = functions.https.onRequest(async(request,response) =>{
-  // const x = data.x;
-  // const y = data.y;
+exports.getLocationByCoordinate = functions.region('asia-northeast3').https.onCall(async(data,context) =>{
   try{
-    const result = await coordinateToAddress(127.10459896729914,37.40269721785548);
-    response.result = result;
-  }catch(e){
-    response.error = e;
+    const y = data.latitude;
+    const x = data.longitude;
+    console.log(`x=${x},y=${y}`);
+    return JSON.stringify(await coordinateToAddress(x,y));
+  }catch(error){
+    console.error(error);
+    throw error;
   }
 })
+
+const xlsx = require('xlsx');
+
+// 엑셀 파일에서 값을 찾아서 반환하는 함수
+function findValuesInExcel(filePath, sheetName, searchColumn, searchValue, targetColumns) {
+  const workbook = xlsx.readFile(filePath);
+  const worksheet = workbook.Sheets[sheetName];
+  const jsonData = xlsx.utils.sheet_to_json(worksheet);
+
+  const result = jsonData.find(row => row[searchColumn] === searchValue);
+
+  if (result) {
+    const values = {};
+    targetColumns.forEach(column => {
+      values[column] = result[column];
+    });
+
+    return values;
+  } else {
+    throw new Error("Value not found in Excel");
+  }
+}

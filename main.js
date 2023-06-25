@@ -284,14 +284,8 @@ function findWorstAirQuality(...args) {
   return worstAirQuality;
 }
 
-
-exports.getAirData = functions.region('asia-northeast3').https.onCall(async (data, context) => {
-  try {
-    const stationName = data.stationName;
-    if (!stationName) {
-      throw new functions.https.HttpsError('invalid-argument', 'station name 요청');
-    }
-    const dayArr = [];
+async function getAirData(stationName){
+  const dayArr = [];
     for (let i = 0; i < 6; i++) {
       dayArr.push(moment().add(i+1, 'days').format("YYYY-MM-DD"));
     }
@@ -333,6 +327,16 @@ exports.getAirData = functions.region('asia-northeast3').https.onCall(async (dat
     response.thumbnailImageUrl = forecastDatas.thumbnailImageUrl;
     response.information = forecastDatas.information;
     response.airData = locationDatas
+    return response;
+}
+
+exports.getAirData = functions.region('asia-northeast3').https.onCall(async (data, context) => {
+  try {
+    const stationName = data.stationName;
+    if (!stationName) {
+      throw new functions.https.HttpsError('invalid-argument', 'station name 요청');
+    }
+    const response = await getAirData(stationName);
     return JSON.stringify(response);
   } catch (error) {
     console.error(error);
@@ -373,12 +377,16 @@ async function coordinateToAddress(x,y) {
   }
 }
 
-exports.getLocationByCoordinate = functions.region('asia-northeast3').https.onCall(async(data,context) =>{
+exports.getAirDataByCoordinate = functions.region('asia-northeast3').https.onCall(async(data,context) =>{
   try{
     const y = data.latitude;
     const x = data.longitude;
-    console.log(`x=${x},y=${y}`);
-    return JSON.stringify(await coordinateToAddress(x,y));
+    const result ={};
+    const location = await coordinateToAddress(x,y);
+    result.location = location;
+    result.airData = await getAirData(location.station);
+    console.log(result);
+    return JSON.stringify(result);
   }catch(error){
     console.error(error);
     throw error;

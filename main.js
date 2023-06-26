@@ -344,6 +344,8 @@ exports.getAirData = functions.region('asia-northeast3').https.onCall(async (dat
   }
 });
 
+
+
 async function coordinateToAddress(x,y) {
   try {
     let result = ""
@@ -354,22 +356,19 @@ async function coordinateToAddress(x,y) {
         Authorization: kakaoServiceKey, // 인증 헤더 값 추가
       }}); 
     const documents = response.data.documents;
+    if (response.status !== 200) {
+      throw new Error("API response error");
+    }
     for(const document of documents){
       if(document.region_type != "B"){
         continue
       }
+      const ko_do = document.region_1depth_name
+      const ko_sigungu = document.region_2depth_name
       const ko_eupmyeondong = document.region_3depth_name
       // 엑셀 파일에서 여러 컬럼의 값을 가져오기
-      result = findValuesInExcel(
-        'address_end.xlsx',
-        'sheet1',
-        'ko_eupmyeondong',
-        ko_eupmyeondong,
-        ['en_do', 'en_sigungu','en_eupmyeondong','station']
-      );
-    }
-    if (response.status !== 200) {
-      throw new Error("API response error");
+      const addressSnapshot = await admin.firestore().collection('addresses').doc(`${ko_do}_${ko_sigungu}_${ko_eupmyeondong}`).get();
+      result = addressSnapshot.data();
     }
     return result;
   } catch (error) {
@@ -385,32 +384,9 @@ exports.getAirDataByCoordinate = functions.region('asia-northeast3').https.onCal
     const location = await coordinateToAddress(x,y);
     result.location = location;
     result.airData = await getAirData(location.station);
-    console.log(result);
     return JSON.stringify(result);
   }catch(error){
     console.error(error);
     throw error;
   }
 })
-
-const xlsx = require('xlsx');
-
-// 엑셀 파일에서 값을 찾아서 반환하는 함수
-function findValuesInExcel(filePath, sheetName, searchColumn, searchValue, targetColumns) {
-  const workbook = xlsx.readFile(filePath);
-  const worksheet = workbook.Sheets[sheetName];
-  const jsonData = xlsx.utils.sheet_to_json(worksheet);
-
-  const result = jsonData.find(row => row[searchColumn] === searchValue);
-
-  if (result) {
-    const values = {};
-    targetColumns.forEach(column => {
-      values[column] = result[column];
-    });
-
-    return values;
-  } else {
-    throw new Error("Value not found in Excel");
-  }
-}
